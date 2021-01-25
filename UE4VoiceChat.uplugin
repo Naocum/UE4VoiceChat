@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "UE4VoiceChat",
+	"Description": "Modular VoiceChat Plugin for UE4",
+	"Category": "Other",
+	"CreatedBy": "Kaan Buran",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "UE4VoiceChat",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+	]
+}
