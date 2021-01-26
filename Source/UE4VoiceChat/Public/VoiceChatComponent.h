@@ -11,6 +11,8 @@
 #define VOICE_MAX_COMPRESSED_BUFFER 20 * 1024
 #define VOICE_STARTING_REMAINDER_SIZE 1 * 1024
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAudioCaptureCompleted, TArray<uint8>, VoiceData, bool, IsCompressed);
+
 UCLASS(BlueprintType, meta = (BlueprintSpawnableComponent))
 class UVoiceChatComponent : public UAudioComponent
 {
@@ -113,6 +115,15 @@ public:
 	 */
 	UFUNCTION()
 		void GenerateData(USoundWaveProcedural* InProceduralWave, int32 SamplesRequired);
+
+	UPROPERTY(BlueprintAssignable)
+		FOnAudioCaptureCompleted OnAudioCaptureCompleted;
+
+	UFUNCTION(BlueprintCallable, Category = "VoiceChat")
+		void PlayVoiceChatAudio(TArray<uint8> VoiceData, bool IsCompressed);
+
+	UFUNCTION(BlueprintCallable, Category = "VoiceChat")
+		void InitAsListener();
 
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 };

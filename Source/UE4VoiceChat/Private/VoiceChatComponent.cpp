@@ -136,22 +136,19 @@ void UVoiceChatComponent::InitVoiceEncoder()
 void UVoiceChatComponent::InitVoiceDecoder()
 {
 	ensure(!VoiceDecoder.IsValid());
-	if (VoiceCapture.IsValid())
+	VoiceDecoder = FVoiceModule::Get().CreateVoiceDecoder(OutputSampleRate, NumOutChannels);
+	if (VoiceDecoder.IsValid())
 	{
-		VoiceDecoder = FVoiceModule::Get().CreateVoiceDecoder(OutputSampleRate, NumOutChannels);
-		if (VoiceDecoder.IsValid())
+		// Approx 1 sec worth of data
+		MaxUncompressedDataSize = NumOutChannels * OutputSampleRate * sizeof(uint16);
+
+		UncompressedData.Empty(MaxUncompressedDataSize);
+		UncompressedData.AddUninitialized(MaxUncompressedDataSize);
+
+		MaxUncompressedDataQueueSize = MaxUncompressedDataSize * 5;
 		{
-			// Approx 1 sec worth of data
-			MaxUncompressedDataSize = NumOutChannels * OutputSampleRate * sizeof(uint16);
-
-			UncompressedData.Empty(MaxUncompressedDataSize);
-			UncompressedData.AddUninitialized(MaxUncompressedDataSize);
-
-			MaxUncompressedDataQueueSize = MaxUncompressedDataSize * 5;
-			{
-				FScopeLock ScopeLock(&QueueLock);
-				UncompressedDataQueue.Empty(MaxUncompressedDataQueueSize);
-			}
+			FScopeLock ScopeLock(&QueueLock);
+			UncompressedDataQueue.Empty(MaxUncompressedDataQueueSize);
 		}
 	}
 }
@@ -225,40 +222,40 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 	UKismetSystemLibrary::PrintString(this, FString("Voicechat Ticking"), true, true, FLinearColor::Red, 0.f);
 
+	if (!IsRunningDedicatedServer() && IsValid(Sound))
+	{
+		/*VoiceComp = CreateVoiceAudioComponent(OutputSampleRate, NumOutChannels);
+		VoiceComp->AddToRoot();*/
+		SoundStreaming = CastChecked<USoundWaveProcedural>(Sound);
+		if (SoundStreaming)
+		{
+			// Bind the GenerateData callback with FOnSoundWaveProceduralUnderflow object
+			SoundStreaming->OnSoundWaveProceduralUnderflow = FOnSoundWaveProceduralUnderflow::CreateUObject(this, &UVoiceChatComponent::GenerateData);
+		}
+	}
+
+	if (!SoundStreaming)
+	{
+		UKismetSystemLibrary::PrintString(this, FString("SoundStreaming is not valid"), true, true, FLinearColor::Red, 0.f);
+		return;
+	}
+	//check(SoundStreaming);
+
+	bool bIsPlaying = IsPlaying();
+	if (bIsPlaying != bLastWasPlaying)
+	{
+		UE_LOG(LogVoice, Log, TEXT("VOIP audio component %s playing!"), bIsPlaying ? TEXT("is") : TEXT("is not"));
+		bLastWasPlaying = bIsPlaying;
+	}
+
+	StarvedDataCount = (!bIsPlaying || (SoundStreaming->GetAvailableAudioByteCount() != 0)) ? 0 : (StarvedDataCount + 1);
+	if (StarvedDataCount > 1)
+	{
+		UE_LOG(LogVoice, Log, TEXT("VOIP audio component starved %d frames!"), StarvedDataCount);
+	}
+
 	if (VoiceCapture.IsValid())
 	{
-		if (!IsRunningDedicatedServer() && IsValid(Sound))
-		{
-			/*VoiceComp = CreateVoiceAudioComponent(OutputSampleRate, NumOutChannels);
-			VoiceComp->AddToRoot();*/
-			SoundStreaming = CastChecked<USoundWaveProcedural>(Sound);
-			if (SoundStreaming)
-			{
-				// Bind the GenerateData callback with FOnSoundWaveProceduralUnderflow object
-				SoundStreaming->OnSoundWaveProceduralUnderflow = FOnSoundWaveProceduralUnderflow::CreateUObject(this, &UVoiceChatComponent::GenerateData);
-			}
-		}
-
-		if (!SoundStreaming)
-		{
-			UKismetSystemLibrary::PrintString(this, FString("SoundStreaming is not valid"), true, true, FLinearColor::Red, 0.f);
-			return;
-		}
-		//check(SoundStreaming);
-
-		bool bIsPlaying = IsPlaying();
-		if (bIsPlaying != bLastWasPlaying)
-		{
-			UE_LOG(LogVoice, Log, TEXT("VOIP audio component %s playing!"), bIsPlaying ? TEXT("is") : TEXT("is not"));
-			bLastWasPlaying = bIsPlaying;
-		}
-
-		StarvedDataCount = (!bIsPlaying || (SoundStreaming->GetAvailableAudioByteCount() != 0)) ? 0 : (StarvedDataCount + 1);
-		if (StarvedDataCount > 1)
-		{
-			UE_LOG(LogVoice, Log, TEXT("VOIP audio component starved %d frames!"), StarvedDataCount);
-		}
-
 		bool bDoWork = false;
 		uint32 TotalVoiceBytes = 0;
 
@@ -295,14 +292,8 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 		if (bDoWork && TotalVoiceBytes > 0)
 		{
+			// At this point, we know that we have some valid data in our hands that is ready to play
 			UKismetSystemLibrary::PrintString(this, FString("TotalVoiceBytes: ").Append(FString::FromInt(TotalVoiceBytes)), true, true, FLinearColor::Red, 0.f);
-
-			// ZERO INPUT
-			if (bZeroInput)
-			{
-				FMemory::Memzero(RawCaptureData.GetData(), TotalVoiceBytes);
-			}
-			// ZERO INPUT END
 
 			// COMPRESSION BEGIN
 			uint32 CompressedDataSize = 0;
@@ -326,6 +317,19 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 				}
 			}
 			// COMPRESSION END
+
+			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, true, FLinearColor::Red, 0.f);
+
+			// After the compressed data is placed on the buffer, place it on a clean array to transmit the size with the array and reduce the network weight (Lots of data is irrelevant)
+			TArray<uint8> CompressedCulledData;
+			CompressedCulledData.AddUninitialized(CompressedDataSize);
+			FMemory::Memcpy(CompressedCulledData.GetData(), CompressedData.GetData(), CompressedDataSize);
+
+			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedCulledData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, true, FLinearColor::Red, 0.f);
+
+			OnAudioCaptureCompleted.Broadcast(CompressedCulledData, true);
+
+			//return;
 
 			// DECOMPRESSION BEGIN
 			uint32 UncompressedDataSize = 0;
@@ -389,6 +393,113 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 				Play();
 			}
 		}
+	}
+}
+
+void UVoiceChatComponent::PlayVoiceChatAudio(TArray<uint8> VoiceData, bool IsCompressed)
+{
+	UKismetSystemLibrary::PrintString(this, FString("Data received: ArraySize: ").Append(FString::FromInt(VoiceData.Num())), true, true, FLinearColor::Red, 0.f);
+
+	TArray<uint8> AudioToPlay;
+
+	uint32 UncompressedDataSize = 0;
+
+	const uint8* VoiceDataPtr = nullptr;
+	uint32 VoiceDataSize = 0;
+	if (true)
+	{
+		// DECOMPRESSION BEGIN
+		if (VoiceDecoder.IsValid() && VoiceData.Num() > 0)
+		{
+			AudioToPlay.AddUninitialized(MaxUncompressedDataSize);
+			UncompressedDataSize = MaxUncompressedDataSize;
+			VoiceDecoder->Decode(VoiceData.GetData(), VoiceData.Num(),
+				AudioToPlay.GetData(), UncompressedDataSize);
+			VOICE_BUFFER_CHECK(AudioToPlay, UncompressedDataSize);
+
+			VoiceDataSize = UncompressedDataSize;
+			VoiceDataPtr = AudioToPlay.GetData();
+
+			UKismetSystemLibrary::PrintString(this, FString("Decompressed data: ArraySize: ").Append(FString::FromInt(UncompressedDataSize)), true, true, FLinearColor::Red, 0.f);
+		}
+		// DECOMPRESSION END
+	}
+	else
+	{
+		AudioToPlay = VoiceData;
+		VoiceDataPtr = AudioToPlay.GetData();
+		VoiceDataSize = AudioToPlay.Num();
+	}
+
+	if (VoiceDataPtr && VoiceDataSize > 0)
+	{
+		FScopeLock ScopeLock(&QueueLock);
+
+		const int32 OldSize = UncompressedDataQueue.Num();
+		const int32 AmountToBuffer = (OldSize + (int32)VoiceDataSize);
+		if (AmountToBuffer <= MaxUncompressedDataQueueSize)
+		{
+			UncompressedDataQueue.AddUninitialized(VoiceDataSize);
+
+			VOICE_BUFFER_CHECK(UncompressedDataQueue, AmountToBuffer);
+			FMemory::Memcpy(UncompressedDataQueue.GetData() + OldSize, VoiceDataPtr, VoiceDataSize);
+			CurrentUncompressedDataQueueSize += VoiceDataSize;
+		}
+		else
+		{
+			UE_LOG(LogVoice, Warning, TEXT("UncompressedDataQueue Overflow!"));
+		}
+	}
+
+	// Wait for approx 1 sec worth of data before playing
+	// TODO: This should be much lower: MaxUncompressedDataSize / 2 equals 1 sec
+	// TODO: What happens if an amount that is smaller is sent?
+	// TODO: If it is already playing, we will forget about this current bunch. We should store it
+	if (!IsPlaying() && (CurrentUncompressedDataQueueSize > (MaxUncompressedDataSize / 4)))
+	{
+		UE_LOG(LogVoice, Log, TEXT("Playback started"));
+		Play();
+	}
+}
+
+void UVoiceChatComponent::InitAsListener()
+{
+	EncodeHint = EAudioEncodeHint::VoiceEncode_Audio;
+	InputSampleRate = 48000;
+	OutputSampleRate = 48000;
+	NumInChannels = 2;
+	NumOutChannels = 2;
+
+	InitVoiceDecoder();
+
+	USoundWaveProcedural* newSoundStreaming = NewObject<USoundWaveProcedural>();
+	newSoundStreaming->SetSampleRate(OutputSampleRate);
+	newSoundStreaming->NumChannels = NumOutChannels;
+	newSoundStreaming->Duration = INDEFINITELY_LOOPING_DURATION;
+	newSoundStreaming->SoundGroup = SOUNDGROUP_Voice;
+	newSoundStreaming->bLooping = false;
+
+	// Turn off async generation in old audio engine on mac.
+#if PLATFORM_MAC
+	if (!AudioDevice->IsAudioMixerEnabled())
+	{
+		newSoundStreaming->bCanProcessAsync = false;
+	}
+	else
+#endif // #if PLATFORM_MAC
+	{
+		newSoundStreaming->bCanProcessAsync = true;
+	}
+
+	Sound = newSoundStreaming;
+	bIsUISound = false;
+	bAllowSpatialization = true;
+	SetVolumeMultiplier(1.5f);
+
+	const FSoftObjectPath VoiPSoundClassName = GetDefault<UAudioSettings>()->VoiPSoundClass;
+	if (VoiPSoundClassName.IsValid())
+	{
+		SoundClassOverride = LoadObject<USoundClass>(nullptr, *VoiPSoundClassName.ToString());
 	}
 }
 

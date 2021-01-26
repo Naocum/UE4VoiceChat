@@ -4,7 +4,7 @@
 #include "UE4VoiceChatModule.h"
 #include "Core.h"
 #include "Modules/ModuleManager.h"
-#include "Interfaces/IPluginManager.h"
+//#include "Interfaces/IPluginManager.h"
 
 //#include "SimulationPluginLibrary/ExampleLibrary.h"
 
