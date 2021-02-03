@@ -220,7 +220,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_FTestVoice_Tick);
 
-	UKismetSystemLibrary::PrintString(this, FString("Voicechat Ticking"), true, true, FLinearColor::Red, 0.f);
+	UKismetSystemLibrary::PrintString(this, FString("Voicechat Ticking"), true, false, FLinearColor::Red, 0.f);
 
 	if (!IsRunningDedicatedServer() && IsValid(Sound))
 	{
@@ -236,7 +236,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 	if (!SoundStreaming)
 	{
-		UKismetSystemLibrary::PrintString(this, FString("SoundStreaming is not valid"), true, true, FLinearColor::Red, 0.f);
+		UKismetSystemLibrary::PrintString(this, FString("SoundStreaming is not valid"), true, false, FLinearColor::Red, 0.f);
 		return;
 	}
 	//check(SoundStreaming);
@@ -293,7 +293,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 		if (bDoWork && TotalVoiceBytes > 0)
 		{
 			// At this point, we know that we have some valid data in our hands that is ready to play
-			UKismetSystemLibrary::PrintString(this, FString("TotalVoiceBytes: ").Append(FString::FromInt(TotalVoiceBytes)), true, true, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("TotalVoiceBytes: ").Append(FString::FromInt(TotalVoiceBytes)), true, false, FLinearColor::Red, 0.f);
 
 			// COMPRESSION BEGIN
 			uint32 CompressedDataSize = 0;
@@ -318,14 +318,14 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 			}
 			// COMPRESSION END
 
-			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, true, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, false, FLinearColor::Red, 0.f);
 
 			// After the compressed data is placed on the buffer, place it on a clean array to transmit the size with the array and reduce the network weight (Lots of data is irrelevant)
 			TArray<uint8> CompressedCulledData;
 			CompressedCulledData.AddUninitialized(CompressedDataSize);
 			FMemory::Memcpy(CompressedCulledData.GetData(), CompressedData.GetData(), CompressedDataSize);
 
-			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedCulledData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, true, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedCulledData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, false, FLinearColor::Red, 0.f);
 
 			OnAudioCaptureCompleted.Broadcast(CompressedCulledData, true);
 
@@ -398,7 +398,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 void UVoiceChatComponent::PlayVoiceChatAudio(TArray<uint8> VoiceData, bool IsCompressed)
 {
-	UKismetSystemLibrary::PrintString(this, FString("Data received: ArraySize: ").Append(FString::FromInt(VoiceData.Num())), true, true, FLinearColor::Red, 0.f);
+	UKismetSystemLibrary::PrintString(this, FString("Data received: ArraySize: ").Append(FString::FromInt(VoiceData.Num())), true, false, FLinearColor::Red, 0.f);
 
 	TArray<uint8> AudioToPlay;
 
@@ -420,7 +420,7 @@ void UVoiceChatComponent::PlayVoiceChatAudio(TArray<uint8> VoiceData, bool IsCom
 			VoiceDataSize = UncompressedDataSize;
 			VoiceDataPtr = AudioToPlay.GetData();
 
-			UKismetSystemLibrary::PrintString(this, FString("Decompressed data: ArraySize: ").Append(FString::FromInt(UncompressedDataSize)), true, true, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("Decompressed data: ArraySize: ").Append(FString::FromInt(UncompressedDataSize)), true, false, FLinearColor::Red, 0.f);
 		}
 		// DECOMPRESSION END
 	}
