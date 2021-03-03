@@ -62,10 +62,21 @@ bool UVoiceChatComponent::InitWithInputDevice(FName InputDeviceName)
 	OutputSampleRate = 48000;
 	NumInChannels = 2;
 	NumOutChannels = 2;
+	UE_LOG(LogVoice, Log, TEXT("Initialization started"));
+	UKismetSystemLibrary::PrintString(this, FString("Initialization started "), true, true, FLinearColor::Red, 0.f);
 
 	InitVoiceCapture();
+	UE_LOG(LogVoice, Log, TEXT("Init Voice Capture ended"));
+	UKismetSystemLibrary::PrintString(this, FString("Init Voice Capture ended "), true, true, FLinearColor::Red, 0.f);
+
 	InitVoiceEncoder();
+	UE_LOG(LogVoice, Log, TEXT("Init Voice Encoder ended"));
+	UKismetSystemLibrary::PrintString(this, FString("Init Voice Encoder ended "), true, true, FLinearColor::Red, 0.f);
+
 	InitVoiceDecoder();
+	UE_LOG(LogVoice, Log, TEXT("Init Voice Decoder ended"));
+	UKismetSystemLibrary::PrintString(this, FString("Init Voice Decoder ended "), true, true, FLinearColor::Red, 0.f);
+
 
 	USoundWaveProcedural* newSoundStreaming = NewObject<USoundWaveProcedural>();
 	newSoundStreaming->SetSampleRate(OutputSampleRate);
@@ -112,6 +123,8 @@ void UVoiceChatComponent::InitVoiceCapture()
 		RawCaptureData.AddUninitialized(MaxRawCaptureDataSize);
 
 		VoiceCapture->Start();
+		UE_LOG(LogVoice, Log, TEXT("Voice Capture started"));
+		UKismetSystemLibrary::PrintString(this, FString("Voice Capture started "), true, true, FLinearColor::Red, 0.f);
 	}
 }
 
@@ -130,6 +143,9 @@ void UVoiceChatComponent::InitVoiceEncoder()
 
 		Remainder.Empty(MaxRemainderSize);
 		Remainder.AddUninitialized(MaxRemainderSize);
+
+		UE_LOG(LogVoice, Log, TEXT("Voice Encoder started"));
+		UKismetSystemLibrary::PrintString(this, FString("Voice Encoder started "), true, true, FLinearColor::Red, 0.f);
 	}
 }
 
@@ -150,6 +166,9 @@ void UVoiceChatComponent::InitVoiceDecoder()
 			FScopeLock ScopeLock(&QueueLock);
 			UncompressedDataQueue.Empty(MaxUncompressedDataQueueSize);
 		}
+
+		UE_LOG(LogVoice, Log, TEXT("Voice Decoder started"));
+		UKismetSystemLibrary::PrintString(this, FString("Voice Decoder started "), true, true, FLinearColor::Red, 0.f);
 	}
 }
 
@@ -220,7 +239,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_FTestVoice_Tick);
 
-	UKismetSystemLibrary::PrintString(this, FString("Voicechat Ticking"), true, false, FLinearColor::Red, 0.f);
+	UKismetSystemLibrary::PrintString(this, FString("Voicechat Ticking"), true, true, FLinearColor::Red, 0.f);
 
 	if (!IsRunningDedicatedServer() && IsValid(Sound))
 	{
@@ -236,7 +255,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 	if (!SoundStreaming)
 	{
-		UKismetSystemLibrary::PrintString(this, FString("SoundStreaming is not valid"), true, false, FLinearColor::Red, 0.f);
+		UKismetSystemLibrary::PrintString(this, FString("SoundStreaming is not valid"), true, true, FLinearColor::Red, 0.f);
 		return;
 	}
 	//check(SoundStreaming);
@@ -256,6 +275,8 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 	if (VoiceCapture.IsValid())
 	{
+		UE_LOG(LogVoice, Log, TEXT("Ciizas"));
+
 		bool bDoWork = false;
 		uint32 TotalVoiceBytes = 0;
 
@@ -277,6 +298,8 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 			MicState = VoiceCapture->GetVoiceData(RawCaptureData.GetData() + LastRemainderSize, NewVoiceDataBytes, NewVoiceDataBytes, SampleCount);
 			TotalVoiceBytes = NewVoiceDataBytes + LastRemainderSize;
 
+			UKismetSystemLibrary::PrintString(this, FString("New voice data bytes: ").Append(FString::FromInt(NewVoiceDataBytes)), true, true, FLinearColor::Red, 0.f);
+
 			// Check to make sure this buffer has a valid, chronological buffer count.
 			if (SampleCount <= CachedSampleCount)
 			{
@@ -285,7 +308,8 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 			CachedSampleCount = SampleCount;
 
-			VOICE_BUFFER_CHECK(RawCaptureData, TotalVoiceBytes);
+			//VOICE_BUFFER_CHECK(RawCaptureData, TotalVoiceBytes);
+			UKismetSystemLibrary::PrintString(this, FString("RawCaptureData, TotalVoiceBytes: MicState: ").Append(FString::FromInt(TotalVoiceBytes)).Append(" ").Append(FString::FromInt(RawCaptureData.Num())).Append(" ").Append(EVoiceCaptureState::ToString(MicState)), true, true, FLinearColor::Red, 0.f);
 			bDoWork = (MicState == EVoiceCaptureState::Ok);
 		}
 
@@ -293,7 +317,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 		if (bDoWork && TotalVoiceBytes > 0)
 		{
 			// At this point, we know that we have some valid data in our hands that is ready to play
-			UKismetSystemLibrary::PrintString(this, FString("TotalVoiceBytes: ").Append(FString::FromInt(TotalVoiceBytes)), true, false, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("TotalVoiceBytes: ").Append(FString::FromInt(TotalVoiceBytes)), true, true, FLinearColor::Red, 0.f);
 
 			// COMPRESSION BEGIN
 			uint32 CompressedDataSize = 0;
@@ -318,14 +342,14 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 			}
 			// COMPRESSION END
 
-			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, false, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, true, FLinearColor::Red, 0.f);
 
 			// After the compressed data is placed on the buffer, place it on a clean array to transmit the size with the array and reduce the network weight (Lots of data is irrelevant)
 			TArray<uint8> CompressedCulledData;
 			CompressedCulledData.AddUninitialized(CompressedDataSize);
 			FMemory::Memcpy(CompressedCulledData.GetData(), CompressedData.GetData(), CompressedDataSize);
 
-			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedCulledData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, false, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("Data compressed: ArraySize: ").Append(FString::FromInt(CompressedCulledData.Num())).Append("CompressedDataSize").Append(FString::FromInt(CompressedDataSize)), true, true, FLinearColor::Red, 0.f);
 
 			OnAudioCaptureCompleted.Broadcast(CompressedCulledData, true);
 
@@ -335,10 +359,13 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 			uint32 UncompressedDataSize = 0;
 			if (VoiceDecoder.IsValid() && CompressedDataSize > 0)
 			{
+				UKismetSystemLibrary::PrintString(this, FString("Decompressing Data"), true, true, FLinearColor::Red, 0.f);
+
 				UncompressedDataSize = MaxUncompressedDataSize;
 				VoiceDecoder->Decode(CompressedData.GetData(), CompressedDataSize,
 					UncompressedData.GetData(), UncompressedDataSize);
 				VOICE_BUFFER_CHECK(UncompressedData, UncompressedDataSize);
+				UKismetSystemLibrary::PrintString(this, FString("Data uncompressed: CompressedArraySize: ").Append(FString::FromInt(CompressedDataSize)).Append("UncompressedDataSize").Append(FString::FromInt(UncompressedDataSize)), true, true, FLinearColor::Red, 0.f);
 			}
 			// DECOMPRESSION END
 
@@ -390,6 +417,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 			if (!bIsPlaying && (CurrentUncompressedDataQueueSize > (MaxUncompressedDataSize / 2)))
 			{
 				UE_LOG(LogVoice, Log, TEXT("Playback started"));
+				UKismetSystemLibrary::PrintString(this, FString("Playback started"), true, true, FLinearColor::Red, 0.f);
 				Play();
 			}
 		}
@@ -398,7 +426,7 @@ void UVoiceChatComponent::TickComponent(float DeltaTime, enum ELevelTick TickTyp
 
 void UVoiceChatComponent::PlayVoiceChatAudio(TArray<uint8> VoiceData, bool IsCompressed)
 {
-	UKismetSystemLibrary::PrintString(this, FString("Data received: ArraySize: ").Append(FString::FromInt(VoiceData.Num())), true, false, FLinearColor::Red, 0.f);
+	UKismetSystemLibrary::PrintString(this, FString("Data received: ArraySize: ").Append(FString::FromInt(VoiceData.Num())), true, true, FLinearColor::Red, 0.f);
 
 	TArray<uint8> AudioToPlay;
 
@@ -420,7 +448,7 @@ void UVoiceChatComponent::PlayVoiceChatAudio(TArray<uint8> VoiceData, bool IsCom
 			VoiceDataSize = UncompressedDataSize;
 			VoiceDataPtr = AudioToPlay.GetData();
 
-			UKismetSystemLibrary::PrintString(this, FString("Decompressed data: ArraySize: ").Append(FString::FromInt(UncompressedDataSize)), true, false, FLinearColor::Red, 0.f);
+			UKismetSystemLibrary::PrintString(this, FString("Decompressed data: ArraySize: ").Append(FString::FromInt(UncompressedDataSize)), true, true, FLinearColor::Red, 0.f);
 		}
 		// DECOMPRESSION END
 	}
